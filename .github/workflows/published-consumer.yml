@@ -69,14 +69,28 @@ jobs:
           python3 - <<'PY'
           import json
           import os
-          from pathlib import Path
+          from pathlib import Path, PurePosixPath
+          from urllib.parse import quote, unquote, urlsplit
           source = Path(os.environ["SCAN_ROOT"]).resolve(strict=True)
           workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve(strict=True)
           if not source.is_dir() or not source.is_relative_to(workspace):
               raise SystemExit("Scan root must remain inside the checkout")
           sarif = json.loads(Path(os.environ["SARIF_FILE"]).read_text())
+          prefix = source.relative_to(workspace).as_posix()
           for run in sarif["runs"]:
-              run.setdefault("originalUriBaseIds", {})["%SRCROOT%"] = {"uri": source.as_uri() + "/"}
+              for result in run.get("results", []):
+                  for location in result.get("locations", []):
+                      artifact = location["physicalLocation"]["artifactLocation"]
+                      uri = artifact["uri"]
+                      parsed = urlsplit(uri)
+                      decoded = unquote(parsed.path)
+                      parts = PurePosixPath(decoded).parts
+                      if (artifact.get("uriBaseId") not in (None, "%SRCROOT%") or
+                          parsed.scheme or parsed.netloc or parsed.query or parsed.fragment or
+                          decoded.startswith("/") or "\\" in decoded or not parts or ".." in parts):
+                          raise SystemExit("Expected a scan-relative SARIF location")
+                      artifact["uri"] = uri if prefix == "." else quote(prefix, safe="/") + "/" + uri
+                      artifact.pop("uriBaseId", None)
           with open(os.environ["UPLOAD_SARIF_FILE"], "x", encoding="utf-8") as output:
               json.dump(sarif, output)
           PY

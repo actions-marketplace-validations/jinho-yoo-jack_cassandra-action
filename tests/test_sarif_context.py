@@ -39,10 +39,22 @@ class SarifSourceContext(unittest.TestCase):
         result = self.run_preparation()
         self.assertEqual(result.returncode, 0, result.stderr)
         uploaded = json.loads(self.output.read_text())
-        self.assertEqual(uploaded["runs"][0]["originalUriBaseIds"]["%SRCROOT%"],
-                         {"uri": self.source.as_uri() + "/"})
-        self.assertEqual(uploaded["runs"][0]["results"], self.document["runs"][0]["results"])
+        result = uploaded["runs"][0]["results"][0]
+        self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"],
+                         {"uri": "tests/fixtures/vulnerable/requirements.txt"})
+        self.assertEqual(result["ruleId"], "fixture")
+        self.assertEqual(len(uploaded["runs"][0]["results"]), len(self.document["runs"][0]["results"]))
         self.assertEqual(json.loads(self.input.read_text()), self.document)
+
+    def test_nonrelative_or_escaping_location_is_rejected(self):
+        for uri in ("../outside.txt", "%2e%2e/outside.txt", "/absolute.txt", "https://example.com/file", "..\\outside"):
+            with self.subTest(uri=uri):
+                self.output.unlink(missing_ok=True)
+                self.document["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] = uri
+                self.input.write_text(json.dumps(self.document))
+                result = self.run_preparation()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.output.exists())
 
     def test_scan_root_outside_checkout_is_rejected(self):
         result = self.run_preparation(self.root)

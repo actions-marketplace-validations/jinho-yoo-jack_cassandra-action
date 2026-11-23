@@ -96,7 +96,7 @@ The example skips SARIF uploads for fork pull requests and Dependabot-triggered 
 
 Never upload exit-`2` results as a successful complete analysis: doing so can wrongly clear existing alerts. SARIF upload is optional; JSON, SBOMs, artifacts and the job summary work without it.
 
-SARIF locations are relative to the scan's `path`. For subdirectory scans, bind `%SRCROOT%` in each run's `originalUriBaseIds` to the absolute scan directory before upload, while keeping the uploader's `checkout_path` at the repository checkout root. Otherwise alerts can point at the wrong repository file. The [published-consumer workflow](.github/workflows/published-consumer.yml) demonstrates this using a separate upload copy, preserving the original reports and findings.
+SARIF locations are relative to the scan's `path`. For subdirectory scans, rebase each upload copy's artifact URI to the repository-relative path and remove its scan-root `uriBaseId`; keep the uploader's `checkout_path` at the repository checkout root. Adding `%SRCROOT%` metadata alone did not preserve the subdirectory in GitHub's stored alert locations. The [published-consumer workflow](.github/workflows/published-consumer.yml) demonstrates explicit, traversal-checked rebasing while preserving original reports and finding identities.
 
 ## Runtime and trust boundaries
 
