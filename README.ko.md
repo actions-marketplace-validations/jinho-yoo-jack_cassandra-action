@@ -96,6 +96,8 @@ SARIF 업로드를 지원하는 저장소에서는 빠른 시작 예제 대신 [
 
 종료 코드 `2`를 정상적인 완전 분석처럼 업로드하면 기존 경고가 잘못 해제될 수 있습니다. SARIF 업로드 없이도 JSON·SBOM·artifact·Job Summary를 사용할 수 있습니다.
 
+SARIF 위치는 검사 `path`를 기준으로 한 상대 경로입니다. 하위 디렉터리를 검사했다면 업로드 전에 각 run의 `originalUriBaseIds`에 `%SRCROOT%`를 절대 검사 디렉터리로 지정하고, 업로더의 `checkout_path`는 저장소 checkout 루트로 유지하세요. 그렇지 않으면 경고가 다른 저장소 파일을 가리킬 수 있습니다. [게시 버전 검증 workflow](.github/workflows/published-consumer.yml)는 원본 보고서와 finding을 보존한 별도 업로드 사본으로 이 처리를 수행합니다.
+
 ## 실행 환경과 보안 경계
 
 - Linux X64/ARM64 runner만 지원합니다. 최신 GitHub-hosted Ubuntu runner 또는 Bash·curl·tar·표준 Unix 도구·SHA-256 검사 도구(`sha256sum` 또는 `shasum`)가 있는 호환 self-hosted runner를 사용하세요. 로컬 서버·데이터베이스·Go 툴체인·프로젝트 의존성 설치는 필요하지 않습니다.

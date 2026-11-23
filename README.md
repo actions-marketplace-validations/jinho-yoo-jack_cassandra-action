@@ -96,6 +96,8 @@ The example skips SARIF uploads for fork pull requests and Dependabot-triggered 
 
 Never upload exit-`2` results as a successful complete analysis: doing so can wrongly clear existing alerts. SARIF upload is optional; JSON, SBOMs, artifacts and the job summary work without it.
 
+SARIF locations are relative to the scan's `path`. For subdirectory scans, bind `%SRCROOT%` in each run's `originalUriBaseIds` to the absolute scan directory before upload, while keeping the uploader's `checkout_path` at the repository checkout root. Otherwise alerts can point at the wrong repository file. The [published-consumer workflow](.github/workflows/published-consumer.yml) demonstrates this using a separate upload copy, preserving the original reports and findings.
+
 ## Runtime and trust boundaries
 
 - Linux X64 and ARM64 runners only. Use a current GitHub-hosted Ubuntu runner or a compatible self-hosted runner with Bash, curl, tar, standard Unix utilities and SHA-256 verification (`sha256sum` or `shasum`). The scan does not require a local server, database, Go toolchain or project dependency installation.

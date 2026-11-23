@@ -62,12 +62,29 @@ jobs:
           CYCLONEDX_FILE: ${{ steps.scan.outputs.cyclonedx-file }}
           SPDX_FILE: ${{ steps.scan.outputs.spdx-file }}
           SUMMARY_FILE: ${{ steps.scan.outputs.summary-file }}
-        run: python3 -B scripts/verify_consumer.py
+          SCAN_ROOT: ${{ github.workspace }}/tests/fixtures/${{ matrix.fixture }}
+          UPLOAD_SARIF_FILE: ${{ runner.temp }}/cassandra-published-${{ matrix.fixture }}.sarif
+        run: |
+          python3 -B scripts/verify_consumer.py
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          source = Path(os.environ["SCAN_ROOT"]).resolve(strict=True)
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve(strict=True)
+          if not source.is_dir() or not source.is_relative_to(workspace):
+              raise SystemExit("Scan root must remain inside the checkout")
+          sarif = json.loads(Path(os.environ["SARIF_FILE"]).read_text())
+          for run in sarif["runs"]:
+              run.setdefault("originalUriBaseIds", {})["%SRCROOT%"] = {"uri": source.as_uri() + "/"}
+          with open(os.environ["UPLOAD_SARIF_FILE"], "x", encoding="utf-8") as output:
+              json.dump(sarif, output)
+          PY
       - name: Upload only verified complete SARIF
         if: always() && inputs.upload-sarif && steps.verify.outcome == 'success'
         uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4
         with:
-          sarif_file: ${{ steps.scan.outputs.sarif-file }}
-          checkout_path: ${{ github.workspace }}/tests/fixtures/${{ matrix.fixture }}
+          sarif_file: ${{ runner.temp }}/cassandra-published-${{ matrix.fixture }}.sarif
+          checkout_path: ${{ github.workspace }}
           category: cassandra-published-${{ matrix.fixture }}
           wait-for-processing: true
