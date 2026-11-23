@@ -1,0 +1,70 @@
+name: Published Action consumer
+on:
+  workflow_dispatch:
+    inputs:
+      upload-sarif:
+        description: Upload verified fixture SARIF to this public repository
+        type: boolean
+        required: true
+        default: false
+permissions:
+  contents: read
+jobs:
+  consumer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fixture: clean
+            expected-exit: '0'
+          - fixture: vulnerable
+            expected-exit: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      # Run only after publishing this immutable Action tag and the CLI assets.
+      - name: Scan with the published Action and CLI
+        id: scan
+        uses: jinho-yoo-jack/cassandra-action@v0.1.0
+        continue-on-error: true # The verifier must accept only the expected result.
+        with:
+          version: v0.1.0
+          path: tests/fixtures/${{ matrix.fixture }}
+          fail-on: low
+          timeout: 5m
+      - name: Save reports
+        if: always() && steps.scan.outputs.output-dir != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: published-cassandra-${{ matrix.fixture }}-reports
+          path: ${{ steps.scan.outputs.output-dir }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Verify the actual outcome and all reports
+        id: verify
+        if: always()
+        env:
+          EXPECTED_EXIT_CODE: ${{ matrix.expected-exit }}
+          SCAN_EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          SCAN_OUTPUT_DIR: ${{ steps.scan.outputs.output-dir }}
+          REPORT_FILE: ${{ steps.scan.outputs.report-file }}
+          SARIF_FILE: ${{ steps.scan.outputs.sarif-file }}
+          CYCLONEDX_FILE: ${{ steps.scan.outputs.cyclonedx-file }}
+          SPDX_FILE: ${{ steps.scan.outputs.spdx-file }}
+          SUMMARY_FILE: ${{ steps.scan.outputs.summary-file }}
+        run: python3 -B scripts/verify_consumer.py
+      - name: Upload only verified complete SARIF
+        if: always() && inputs.upload-sarif && steps.verify.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif-file }}
+          checkout_path: ${{ github.workspace }}/tests/fixtures/${{ matrix.fixture }}
+          category: cassandra-published-${{ matrix.fixture }}
+          wait-for-processing: true

@@ -32,6 +32,8 @@ Both matrix jobs retain artifacts, then `scripts/verify_consumer.py` checks the 
 
 This workflow intentionally uses public APIs and cannot be validated by the offline wrapper tests. Publish the upstream CLI assets before pushing this repository to `main`, then inspect both jobs and retained reports. A local YAML file is not an observed CI run. SARIF upload permissions and the Marketplace listing require separate remote verification.
 
+After publishing the Action tag, manually run `.github/workflows/published-consumer.yml`. Unlike the main-branch integration test, it uses `jinho-yoo-jack/cassandra-action@v0.1.0` directly. It verifies the same clean/vulnerable outcomes and artifacts. Its `upload-sarif` input defaults to false; opting in uploads only reports accepted by the verifier, with a distinct category per fixture and processing confirmation. This manual workflow grants `security-events: write` to its test job, not to the Action or ordinary scan consumers.
+
 ## First release prerequisites and order
 
 1. Verify the upstream CLI `v0.1.0` release under `jinho-yoo-jack/Cassandra` contains `cassandra_v0.1.0_linux_amd64.tar.gz`, `cassandra_v0.1.0_linux_arm64.tar.gz` and `checksums.txt`. Archives must contain the `cassandra` executable; checksums must use the exact archive names. The download base remains `https://github.com/jinho-yoo-jack/Cassandra/releases/download`.
