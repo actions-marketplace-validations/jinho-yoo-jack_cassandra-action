@@ -1,0 +1,86 @@
+# Optional complete consumer workflow. Copy into your repository's .github/workflows/.
+name: Cassandra Code scanning
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Scan
+        id: cassandra
+        uses: jinho-yoo-jack/cassandra-action@v0.1.0
+        continue-on-error: true # Preserve artifacts; the final gate enforces the actual exit.
+        with:
+          version: v0.1.0
+          path: .
+          fail-on: high
+          timeout: 5m
+      - name: Save reports
+        if: always() && steps.cassandra.outputs.output-dir != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: cassandra-reports
+          path: ${{ steps.cassandra.outputs.output-dir }}
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Check complete SARIF exists
+        id: sarif
+        if: >-
+          always() &&
+          ((steps.cassandra.outcome == 'success' && steps.cassandra.outputs.exit-code == '0') ||
+          (steps.cassandra.outcome == 'failure' && steps.cassandra.outputs.exit-code == '1')) &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+          github.actor != 'dependabot[bot]'
+        env:
+          SARIF_FILE: ${{ steps.cassandra.outputs.sarif-file }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          path = Path(os.environ["SARIF_FILE"])
+          if not path.is_file() or path.stat().st_size == 0:
+              raise SystemExit("Complete SARIF file is missing")
+          sarif = json.loads(path.read_text(encoding="utf-8"))
+          runs = sarif.get("runs", [])
+          if sarif.get("version") != "2.1.0" or not runs:
+              raise SystemExit("Expected SARIF 2.1.0 runs")
+          for run in runs:
+              invocations = run.get("invocations", [])
+              if not invocations or not all(i.get("executionSuccessful") is True for i in invocations):
+                  raise SystemExit("Refusing incomplete SARIF analysis")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("ready=true\n")
+          PY
+      - name: Upload complete analysis to Code scanning
+        if: always() && steps.sarif.outputs.ready == 'true'
+        uses: github/codeql-action/upload-sarif@800a1d8701a65d150a672fef0923dbf2660a62ec # v4
+        with:
+          sarif_file: ${{ steps.cassandra.outputs.sarif-file }}
+          category: cassandra
+          wait-for-processing: true
+      - name: Enforce the original scanner result
+        if: always()
+        env:
+          SCAN_EXIT_CODE: ${{ steps.cassandra.outputs.exit-code }}
+          SCAN_OUTCOME: ${{ steps.cassandra.outcome }}
+        shell: bash
+        run: |
+          case "$SCAN_OUTCOME:$SCAN_EXIT_CODE" in
+            success:0) exit 0 ;;
+            failure:1) exit 1 ;;
+            *) exit 2 ;;
+          esac

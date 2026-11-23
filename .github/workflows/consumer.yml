@@ -1,0 +1,54 @@
+name: Released CLI consumer
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  consumer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fixture: clean
+            expected-exit: '0'
+          - fixture: vulnerable
+            expected-exit: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      # Real release and public APIs, not the offline test double. No installs.
+      - name: Scan fixture with the local Action and released CLI
+        id: scan
+        uses: ./
+        continue-on-error: true # Only to retain reports; verification below is mandatory.
+        with:
+          version: v0.1.0
+          path: tests/fixtures/${{ matrix.fixture }}
+          fail-on: low
+          timeout: 5m
+      - name: Save reports, including diagnostic artifacts on failure
+        if: always() && steps.scan.outputs.output-dir != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: cassandra-${{ matrix.fixture }}-reports
+          path: ${{ steps.scan.outputs.output-dir }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Enforce expected result and verify all report outputs
+        if: always()
+        env:
+          EXPECTED_EXIT_CODE: ${{ matrix.expected-exit }}
+          SCAN_EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          SCAN_OUTPUT_DIR: ${{ steps.scan.outputs.output-dir }}
+          REPORT_FILE: ${{ steps.scan.outputs.report-file }}
+          SARIF_FILE: ${{ steps.scan.outputs.sarif-file }}
+          CYCLONEDX_FILE: ${{ steps.scan.outputs.cyclonedx-file }}
+          SPDX_FILE: ${{ steps.scan.outputs.spdx-file }}
+          SUMMARY_FILE: ${{ steps.scan.outputs.summary-file }}
+        run: python3 -B scripts/verify_consumer.py

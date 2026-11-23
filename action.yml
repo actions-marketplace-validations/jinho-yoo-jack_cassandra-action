@@ -1,0 +1,63 @@
+# Adapted from Cassandra/action.yml: standalone Action with a pinned CLI default.
+name: Cassandra vulnerability scan
+description: Scan a checkout into SBOMs, a code/dependency report and SARIF without running its code.
+author: jinho-yoo-jack
+branding:
+  icon: shield
+  color: purple
+inputs:
+  version:
+    description: Exact published CLI release tag. Floating tags are refused.
+    required: false
+    default: 'v0.1.0'
+  path:
+    description: Directory inside the checked-out workspace to analyse.
+    required: false
+    default: '.'
+  fail-on:
+    description: 'Severity threshold: none, low, medium, high or critical. Unknown severities block enabled gates; incomplete scans always fail.'
+    required: false
+    default: high
+  timeout:
+    description: 'Total scan timeout, for example 30s or 5m.'
+    required: false
+    default: 5m
+  nvd-api-key:
+    description: Optional NVD API key to increase the public API rate limit.
+    required: false
+outputs:
+  exit-code:
+    description: '0 passed, 1 vulnerability policy failed, 2 incomplete scan or operational error.'
+    value: ${{ steps.scan.outputs.exit-code }}
+  output-dir:
+    description: Directory of this run's reports; retain with upload-artifact even after failure.
+    value: ${{ steps.scan.outputs.output-dir }}
+  report-file:
+    description: Full JSON report.
+    value: ${{ steps.scan.outputs.report-file }}
+  sarif-file:
+    description: SARIF report. Only upload when exit-code is 0 or 1 and the file exists.
+    value: ${{ steps.scan.outputs.sarif-file }}
+  cyclonedx-file:
+    description: CycloneDX 1.6 SBOM.
+    value: ${{ steps.scan.outputs.cyclonedx-file }}
+  spdx-file:
+    description: SPDX 2.3 SBOM.
+    value: ${{ steps.scan.outputs.spdx-file }}
+  summary-file:
+    description: Markdown summary also appended to the job summary.
+    value: ${{ steps.scan.outputs.summary-file }}
+runs:
+  using: composite
+  steps:
+    - name: Download, verify and scan
+      id: scan
+      shell: bash
+      env:
+        CASSANDRA_ACTION_PATH: ${{ github.action_path }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        NVD_API_KEY: ${{ inputs.nvd-api-key }}
+      run: bash "$CASSANDRA_ACTION_PATH/scripts/action.sh"
